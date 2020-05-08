@@ -1,0 +1,23 @@
+{
+  "name": "azure-websockets",
+  "version": "1.0.0",
+  "description": "Providing api accessing Azure WebSocket service",
+  "main": "azure-websockets.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vicancy/azure-websockets.git"
+  },
+  "author": "vicancy",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/vicancy/azure-websockets/issues"
+  },
+  "homepage": "https://github.com/vicancy/azure-websockets#readme",
+  "dependencies": {
+    "axios": "^0.19.2",
+    "jsonwebtoken": "^8.5.1"
+  }
+}

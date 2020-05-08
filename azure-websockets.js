@@ -1,5 +1,5 @@
-import { sign } from 'jsonwebtoken';
-import axios from 'axios';
+const jwt = require('jsonwebtoken');
+const axios = require('axios');
 
 function parseConnectionString(conn) {
     const em = /Endpoint=(.*?);/g.exec(conn);
@@ -24,88 +24,84 @@ function parseConnectionString(conn) {
     };
 }
 
-class GroupClient {
-    constructor(manager, groupName) {
-        this._manager = manager;
-        this._groupName = groupName;
-    }
+function GroupClient(manager, groupName) {
+    this._manager = manager;
+    this._groupName = groupName;
 }
 
 function UserClient(manager, userName) {
 
 }
 
-class EventHandler {
-    constructor(manager, headers) {
-        let query = {};
-        for (let p of new URLSearchParams(headers['x-asrs-client-query']).entries()) {
-            query[p[0]] = p[1];
-        }
-        this.connectionId = headers['x-asrs-connection-id'];
-        this.userId = headers['x-asrs-user-id'];
-        this.query = query;
-        this.eventName = headers['x-asrs-event'];
-        this.isConnectEvent = this.eventName == 'connect';
-        this.isDisconnectEvent = this.eventName == 'disconnect';
-        this.isMessageEvent = this.eventName == 'message';
+function EventHandler(manager, headers) {
+    let query = {};
+    for (let p of new URLSearchParams(headers['x-asrs-client-query']).entries()) {
+        query[p[0]] = p[1];
     }
+
+    this.connectionId = headers['x-asrs-connection-id'];
+    this.userId = headers['x-asrs-user-id'];
+    this.query = query;
+    this.eventName = headers['x-asrs-event'];
+    this.isConnectEvent = this.eventName == 'connect';
+    this.isDisconnectEvent = this.eventName == 'disconnect';
+    this.isMessageEvent = this.eventName == 'message';
 }
 
-class AzureWebSocketManager {
-    constructor(connString, hubName, context) {
-        var parsed = parseConnectionString(connString);
-        if (!parsed)
-            throw 'Invalid ConnectionString';
-        this._hubName = hubName || '_default';
-        this._context = context || console;
-        this.Host = parsed.host;
-        this._key = parsed.key;
-        this._ws = parsed.wshost;
-        this._audience = parsed.audience;
-        this._getToken = function (path) {
-            return 'Bearer ' + sign({}, this._key, {
-                audience: this._audience + path,
-                expiresIn: '1h',
-                algorithm: 'HS256'
+function AzureWebSocketManager(connString, hubName, context) {
+    var parsed = parseConnectionString(connString);
+    if (!parsed) throw 'Invalid ConnectionString';
+    this._hubName = hubName || '_default';
+    this._context = context || console;
+
+    this.Host = parsed.host;
+    this._key = parsed.key;
+    this._ws = parsed.wshost;
+    this._audience = parsed.audience;
+    this._getToken = function (path) {
+        return 'Bearer ' + jwt.sign({}, this._key, {
+            audience: this._audience + path,
+            expiresIn: '1h',
+            algorithm: 'HS256'
+        });
+    };
+    this._invoke = async function (path, method, content) {
+        var url = this.Host + path;
+        var token = this._getToken(path);
+        try {
+            await axios[method](url, content, {
+                headers: {
+                    'Content-Type': 'text/plain',
+                    'Authorization': token
+                }
             });
-        };
-        this._invoke = async function (path, method, content) {
-            var url = this.Host + path;
-            var token = this._getToken(path);
-            try {
-                await axios[method](url, content, {
-                    headers: {
-                        'Content-Type': 'text/plain',
-                        'Authorization': token
-                    }
-                });
-                this._context.log(`invoked ${method}:${url}`);
-            }
-            catch (err) {
-                this._context.err(`error invoking ${method}:${url}: ${err}`);
-            }
-        };
-    }
-    group(groupName) {
-        return new GroupClient(this, groupName);
-    }
-    user(userName) {
-        return new UserClient(this, userName);
-    }
-    broadcast(content) {
-        return this._invoke('ws/api/v1', 'post', content);
-    }
-    event(header) {
-        return new EventHandler(this, header);
+            this._context.log(`invoked ${method}:${url}`);
+        } catch (err) {
+            this._context.err(`error invoking ${method}:${url}: ${err}`);
+        }
     }
 }
 
-class AzureWebSocket {
-    constructor() { }
-    client(connString, hubName, context) {
-        return new AzureWebSocketManager(connString, hubName, context);
-    }
+AzureWebSocketManager.prototype.group = function (groupName) {
+    return new GroupClient(this, groupName);
+}
+
+AzureWebSocketManager.prototype.user = function (userName) {
+    return new UserClient(this, userName);
+}
+
+AzureWebSocketManager.prototype.broadcast = function (content) {
+    return this._invoke('ws/api/v1', 'post', content)
+}
+
+AzureWebSocketManager.prototype.event = function (header) {
+    return new EventHandler(this, header);
+}
+
+function AzureWebSocket(){}
+AzureWebSocket.prototype.client = function (connString, hubName, context){
+    return new AzureWebSocketManager(connString, hubName, context);
 }
 
 var ws = new AzureWebSocket();
-export default ws;
+module.exports = ws;

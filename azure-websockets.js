@@ -24,6 +24,10 @@ function parseConnectionString(conn) {
     };
 }
 
+function getSubPath(hub){
+    return hub ? `hubs/${hub}` : '';
+}
+
 function GroupClient(manager, groupName) {
     this._manager = manager;
     this._groupName = groupName;
@@ -49,21 +53,27 @@ function EventHandler(manager, headers) {
 }
 
 function AzureWebSocketManager(connString, hubName, context) {
+    connString = connString || process.env["AzureSignalRConnectionString"];
     var parsed = parseConnectionString(connString);
     if (!parsed) throw 'Invalid ConnectionString';
-    this._hubName = hubName || '_default';
+    this._hubName = hubName;
     this._context = context || console;
-
     this.Host = parsed.host;
     this._key = parsed.key;
     this._ws = parsed.wshost;
     this._audience = parsed.audience;
-    this._getToken = function (path) {
-        return 'Bearer ' + jwt.sign({}, this._key, {
+    var subPath = hubName ? `hubs/${hubName}/` : '';;
+    this._clientPath = `ws/client/${subPath}`;
+    this._servicePath = `ws/api/v1/${subPath}`;
+
+    this._getToken = function (path, user) {
+        var payload = {
             audience: this._audience + path,
             expiresIn: '1h',
-            algorithm: 'HS256'
-        });
+            algorithm: 'HS256',
+        };
+        if (user) payload.subject = user;
+        return 'Bearer ' + jwt.sign({}, this._key, payload);
     };
     this._invoke = async function (path, method, content) {
         var url = this.Host + path;
@@ -79,6 +89,10 @@ function AzureWebSocketManager(connString, hubName, context) {
         } catch (err) {
             this._context.err(`error invoking ${method}:${url}: ${err}`);
         }
+    };
+    this.endpoint = function (user) {
+        var token = this._getToken(_clientPath, user);
+        return `${this._ws}${_clientPath}?access_token=${token}`;
     }
 }
 
@@ -91,15 +105,15 @@ AzureWebSocketManager.prototype.user = function (userName) {
 }
 
 AzureWebSocketManager.prototype.broadcast = function (content) {
-    return this._invoke('ws/api/v1', 'post', content)
+    return this._invoke($`ws/api/v1/hubs/${this._hubName}`, 'post', content)
 }
 
 AzureWebSocketManager.prototype.event = function (header) {
     return new EventHandler(this, header);
 }
 
-function AzureWebSocket(){}
-AzureWebSocket.prototype.client = function (connString, hubName, context){
+function AzureWebSocket() { }
+AzureWebSocket.prototype.client = function (connString, hubName, context) {
     return new AzureWebSocketManager(connString, hubName, context);
 }
 

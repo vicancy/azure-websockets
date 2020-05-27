@@ -108,8 +108,11 @@ function AzureWebSocketManager(connString, hubName, context) {
 
     this.host = host;
     this.getEndpoint = function (user) {
-        var token = getToken(clientPath, user);
-        return `${ws}${clientPath}?access_token=${token}`;
+        var endpoint = `${ws}${clientPath}`;
+        if (user) {
+            endpoint += `?access_token=${token}`;
+        }
+        return endpoint;
     };
     this.broadcast = function (content) {
         return invokeApi('', 'post', content)

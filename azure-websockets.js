@@ -24,20 +24,7 @@ function parseConnectionString(conn) {
     };
 }
 
-function getSubPath(hub){
-    return hub ? `hubs/${hub}` : '';
-}
-
-function GroupClient(manager, groupName) {
-    this._manager = manager;
-    this._groupName = groupName;
-}
-
-function UserClient(manager, userName) {
-
-}
-
-function EventHandler(manager, headers) {
+function EventHandler(headers) {
     let query = {};
     for (let p of new URLSearchParams(headers['x-asrs-client-query']).entries()) {
         query[p[0]] = p[1];
@@ -52,68 +39,130 @@ function EventHandler(manager, headers) {
     this.isMessageEvent = this.eventName == 'message';
 }
 
-function AzureWebSocketManager(connString, hubName, context) {
+function AzureWebSocketManager(connString = null, hubName = null, context = null) {
     connString = connString || process.env["AzureSignalRConnectionString"];
     var parsed = parseConnectionString(connString);
     if (!parsed) throw 'Invalid ConnectionString';
-    this._hubName = hubName;
-    this._context = context || console;
-    this.Host = parsed.host;
-    this._key = parsed.key;
-    this._ws = parsed.wshost;
-    this._audience = parsed.audience;
+    hubName = hubName || process.env["HubName"];
+    context = context || console;
+    var host =  parsed.host;
+    var key = parsed.key;
+    var ws = parsed.wshost;
+    var audience = parsed.audience;
     var subPath = hubName ? `hubs/${hubName}/` : '';;
-    this._clientPath = `ws/client/${subPath}`;
-    this._servicePath = `ws/api/v1/${subPath}`;
-
-    this._getToken = function (path, user) {
+    var clientPath = `ws/client/${subPath}`;
+    var servicePath = `ws/api/v1/${subPath}`;
+    var getToken = function (path, user) {
         var payload = {
-            audience: this._audience + path,
+            audience: audience + path,
             expiresIn: '1h',
             algorithm: 'HS256',
         };
         if (user) payload.subject = user;
-        return 'Bearer ' + jwt.sign({}, this._key, payload);
+        return jwt.sign({}, key, payload);
     };
-    this._invoke = async function (path, method, content) {
-        var url = this.Host + path;
-        var token = this._getToken(path);
+    var invokeApi = async function (subpath, method, content) {
+        var path = servicePath + subpath;
+        var url = host + path;
+        var token = getToken(path);
         try {
-            await axios[method](url, content, {
-                headers: {
-                    'Content-Type': 'text/plain',
-                    'Authorization': token
+            var response;
+            if (method === 'post' || method === 'put' || method === 'patch'){
+                response = await axios[method](url, content, {
+                    headers: {
+                        'Content-Type': 'text/plain',
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+            } else {
+                response = await axios[method](url, {
+                    headers: {
+                        'Content-Type': 'text/plain',
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+            }
+            var log = `invoked ${method}:${url}: ${response.status}`;
+            context.log(log);
+            return {
+                status: response.status,
+                body: {
+                    type: 'log',
+                    code: response.status,
+                    text: log
                 }
-            });
-            this._context.log(`invoked ${method}:${url}`);
+            };
         } catch (err) {
-            this._context.err(`error invoking ${method}:${url}: ${err}`);
+            var log = `error invoking ${method}:${url}: ${err.response.status}`;
+            context.log(`error invoking ${method}:${url}: ${err.response.status}`);
+            return {
+                status: err.response.status,
+                body: {
+                    type: 'error',
+                    code: err.response.status,
+                    text: log
+                }
+            };
         }
     };
-    this.endpoint = function (user) {
-        var token = this._getToken(_clientPath, user);
-        return `${this._ws}${_clientPath}?access_token=${token}`;
+
+    this.host = host;
+    this.getEndpoint = function (user) {
+        var token = getToken(clientPath, user);
+        return `${ws}${clientPath}?access_token=${token}`;
+    };
+    this.broadcast = function (content) {
+        return invokeApi('', 'post', content)
+    };
+    this.sendToConnection = function (connectionId, content) {
+        return invokeApi(`connections/${connectionId}`, 'post', content)
+    };
+    this.addToGroup = function (group, user) {
+        return invokeApi(`groups/${encodeURIComponent(group)}/users/${encodeURIComponent(user)}`, 'put')
+    };
+    this.removeFromGroup = function (group, user) {
+        return invokeApi(`groups/${encodeURIComponent(group)}/users/${encodeURIComponent(user)}`, 'delete');
+    };
+    this.sendToGroup = function (group, content) {
+        return invokeApi(`groups/${encodeURIComponent(group)}`, 'post', content);
+    };
+    this.sendToUser = function (user, content) {
+        return invokeApi(`users/${encodeURIComponent(user)}`, 'post', content);
+    };
+    this.userExists = async function (user){
+        var response = await invokeApi(`users/${encodeURIComponent(user)}`, 'head');
+        if (response.status === 404){
+            return false;
+        } else if (response.status === 200){
+            return true;
+        } else {
+            throw $`Unexpected status code ${response.status}`
+        }
+    };
+    this.groupExists = async function (group){
+        var response = await invokeApi(`groups/${encodeURIComponent(group)}`, 'head');
+        if (response.status === 404){
+            return false;
+        } else if (response.status === 200){
+            return true;
+        } else {
+            throw $`Unexpected status code ${response.status}`
+        }
     }
 }
 
-AzureWebSocketManager.prototype.group = function (groupName) {
-    return new GroupClient(this, groupName);
-}
-
-AzureWebSocketManager.prototype.user = function (userName) {
-    return new UserClient(this, userName);
-}
-
-AzureWebSocketManager.prototype.broadcast = function (content) {
-    return this._invoke($`ws/api/v1/hubs/${this._hubName}`, 'post', content)
-}
-
 AzureWebSocketManager.prototype.event = function (header) {
-    return new EventHandler(this, header);
+    return new EventHandler(header);
 }
 
 function AzureWebSocket() { }
 AzureWebSocket.prototype.client = function (connString, hubName, context) {
+    return new AzureWebSocketManager(connString, hubName, context);
+}
+
+AzureWebSocket.prototype.default = function (context) {
+    var connString = process.env["AzureSignalRConnectionString"];
+    var hubName = process.env["HubName"];
     return new AzureWebSocketManager(connString, hubName, context);
 }
 

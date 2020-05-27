@@ -120,6 +120,15 @@ function AzureWebSocketManager(connString, hubName, context) {
     this.sendToConnection = function (connectionId, content) {
         return invokeApi(`connections/${connectionId}`, 'post', content)
     };
+    this.closeConnection = function (connectionId, reason) {
+        return invokeApi(`connections/${connectionId}?reason=${reason}`, 'delete');
+    };
+    this.addConnectionToGroup = function (group, connectionId) {
+        return invokeApi(`groups/${encodeURIComponent(group)}/connections/${connectionId}`, 'put')
+    };
+    this.removeConnectionFromGroup = function (group, connectionId) {
+        return invokeApi(`groups/${encodeURIComponent(group)}/connections/${connectionId}`, 'delete');
+    };
     this.addToGroup = function (group, user) {
         return invokeApi(`groups/${encodeURIComponent(group)}/users/${encodeURIComponent(user)}`, 'put')
     };
@@ -131,6 +140,16 @@ function AzureWebSocketManager(connString, hubName, context) {
     };
     this.sendToUser = function (user, content) {
         return invokeApi(`users/${encodeURIComponent(user)}`, 'post', content);
+    };
+    this.connectionExists = async function (connectionId){
+        var response = await invokeApi(`connections/${connectionId}`, 'head');
+        if (response.status === 404){
+            return false;
+        } else if (response.status === 200){
+            return true;
+        } else {
+            throw $`Unexpected status code ${response.status}`
+        }
     };
     this.userExists = async function (user){
         var response = await invokeApi(`users/${encodeURIComponent(user)}`, 'head');

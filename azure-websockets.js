@@ -39,7 +39,7 @@ function EventHandler(headers) {
     this.isMessageEvent = this.eventName == 'message';
 }
 
-function AzureWebSocketManager(connString = null, hubName = null, context = null) {
+function AzureWebSocketManager(connString, hubName, context) {
     connString = connString || process.env["AzureSignalRConnectionString"];
     var parsed = parseConnectionString(connString);
     if (!parsed) throw 'Invalid ConnectionString';

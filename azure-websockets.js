@@ -2,14 +2,14 @@ const jwt = require('jsonwebtoken');
 const axios = require('axios');
 
 function parseConnectionString(conn) {
-    const em = /Endpoint=(.*?);/g.exec(conn);
+    const em = /Endpoint=(.*?)(;|$)/g.exec(conn);
     if (!em) return null;
     const endpoint = em[1];
-    const km = /AccessKey=(.*?);/g.exec(conn);
+    const km = /AccessKey=(.*?)(;|$)/g.exec(conn);
     if (!km) return null;
     const key = km[1];
     if (!endpoint || !key) return null;
-    const pm = /Port=(.*?);/g.exec(conn);
+    const pm = /Port=(.*?)(;|$)/g.exec(conn);
     const port = pm == null ? '' : pm[1];
     var url = new URL(endpoint);
     url.port = port;

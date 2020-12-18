@@ -11,19 +11,22 @@ function parseConnectionString(conn) {
     if (!em) return null;
 
     const endpoint = em[1];
+    console.log(endpoint)
 
     const pm = /Port=(.*?);/g.exec(conn);
     const port = pm == null ? '' : pm[1];
     var url = new URL(endpoint);
+    const audience = url.toString();
     url.port = port;
     const host = url.toString();
-    const audience = url.toString();
 
     var r = {
         host: host,
         audience: audience,
         wshost: host.replace('https://', 'wss://').replace('http://', 'ws://')
     };
+
+    console.log(r);
 
     if (clientId != undefined) {
         let msalConfig = {
@@ -106,6 +109,7 @@ function AzureWebSocketManager(connString, hubName, context) {
         var path = servicePath + subpath;
         var url = host + path;
         var token = await parsed.getToken(path);
+
         try {
             var response;
             if (method === 'post' || method === 'put' || method === 'patch') {
@@ -134,7 +138,6 @@ function AzureWebSocketManager(connString, hubName, context) {
                 }
             };
         } catch (err) {
-            var log = `error invoking ${method}:${url}: ${err.response.status}`;
             context.log(`error invoking ${method}:${url}: ${err.response.status}`);
             return {
                 status: err.response.status,

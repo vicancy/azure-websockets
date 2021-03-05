@@ -1,11 +1,11 @@
-const settings = require('./settings.json').ConnectionString;
-const Manager = require('./azure-websockets');//(settings);
+const {WebPubSubServiceEndpoint, WebPubSubServiceRestClient} = require('./webpubsub');
 
-var client = new Manager(settings);
-client.broadcast("hello")
-    .then(() => {
-        console.log("succeed");
-    })
-    .catch(err => {
-        console.log(err);
-    });
+async function main() {
+    var se = new WebPubSubServiceEndpoint("conn");
+    var clientResponse = se.signClient('hub1');
+    console.log(clientResponse);
+    var rest = new WebPubSubServiceRestClient("conn", "hub");
+    await rest.sendToAll("message");
+}
+
+main();

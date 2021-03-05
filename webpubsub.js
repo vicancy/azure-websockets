@@ -3,12 +3,73 @@
  * Changes may cause incorrect behavior and will be lost if the code is regenerated.
  */
 (function (global, factory) {
-    typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports, require('@azure/ms-rest-azure-js'), require('@azure/ms-rest-js'), require('jsonwebtoken'), require('url')) :
-    typeof define === 'function' && define.amd ? define(['exports', '@azure/ms-rest-azure-js', '@azure/ms-rest-js', 'jsonwebtoken', 'url'], factory) :
-    (global = global || self, factory((global.Azure = global.Azure || {}, global.Azure.WebPubSub = {}), global.msRestAzure, global.msRest, global.jwt, global.URL));
-}(this, (function (exports, msRestAzure, msRest, jwt, url) { 'use strict';
+    typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports, require('jsonwebtoken'), require('url'), require('@azure/ms-rest-azure-js'), require('@azure/ms-rest-js')) :
+    typeof define === 'function' && define.amd ? define(['exports', 'jsonwebtoken', 'url', '@azure/ms-rest-azure-js', '@azure/ms-rest-js'], factory) :
+    (global = global || self, factory((global.Azure = global.Azure || {}, global.Azure.WebPubSub = {}), global.jwt, global.URL, global.msRestAzure, global.msRest));
+}(this, (function (exports, jwt, url, msRestAzure, msRest) { 'use strict';
 
     jwt = jwt && Object.prototype.hasOwnProperty.call(jwt, 'default') ? jwt['default'] : jwt;
+
+    // Copyright (c) Microsoft Corporation.
+    class WebPubSubServiceEndpoint {
+        /**
+         * Creates a new WebPubSubServiceEndpoint object.
+         *
+         * @constructor
+         * @param {string} conn The Connection String.
+         */
+        constructor(conn) {
+            this.conn = conn;
+            this.endpoint = this.getServiceEndpoint(conn);
+        }
+        signClient(hub) {
+            var clientUrl = `${this.endpoint.wshost}client/hubs/${hub}`;
+            var url$1 = new url.URL(clientUrl);
+            url$1.port = '';
+            const audience = url$1.toString();
+            var key = this.endpoint.key;
+            return {
+                url: clientUrl,
+                token: jwt.sign({}, key, {
+                    audience: audience,
+                    expiresIn: "1h",
+                    algorithm: "HS256"
+                })
+            };
+        }
+        getServiceEndpoint(conn) {
+            var endpoint = this.parseConnectionString(conn);
+            if (!endpoint) {
+                throw new Error("Invalid connection string: " + conn);
+            }
+            return endpoint;
+        }
+        parseConnectionString(conn) {
+            const em = /Endpoint=(.*?)(;|$)/g.exec(conn);
+            if (!em)
+                return null;
+            const endpoint = em[1];
+            const km = /AccessKey=(.*?)(;|$)/g.exec(conn);
+            if (!km)
+                return null;
+            const key = km[1];
+            if (!endpoint || !key)
+                return null;
+            const pm = /Port=(.*?)(;|$)/g.exec(conn);
+            const port = pm == null ? '' : pm[1];
+            var url$1 = new url.URL(endpoint);
+            url$1.port = port;
+            const host = url$1.toString();
+            url$1.port = '';
+            const audience = url$1.toString();
+            return {
+                host: host,
+                audience: audience,
+                key: key,
+                wshost: host.replace('https://', 'wss://').replace('http://', 'ws://')
+            };
+        }
+    }
 
     /*! *****************************************************************************
     Copyright (c) Microsoft Corporation.
@@ -1107,45 +1168,17 @@
              */
             this.apiVersion = "2020-10-01";
             this.hub = hub;
-            var endpoint = this.parseConnectionString(connectionString);
-            if (endpoint === null) {
-                throw new msRest.RestError("Invalid connection string: " + connectionString);
-            }
-            this.credential = new WebPubSubKeyCredentials(endpoint.key);
+            var endpoint = new WebPubSubServiceEndpoint(connectionString);
+            this.credential = new WebPubSubKeyCredentials(endpoint.endpoint.key);
             this.client = new WebPubSubServiceClient(this.credential, {
                 //httpPipelineLogger: options?.dumpRequest ? new ConsoleHttpPipelineLogger(HttpPipelineLogLevel.INFO) : undefined,
-                baseUri: endpoint.host,
+                baseUri: endpoint.endpoint.host,
                 requestPolicyFactories: (options === null || options === void 0 ? void 0 : options.dumpRequest) ? this.getFactoryWithLogPolicy : undefined,
             });
             this.sender = new WebPubSubSendApi(this.client);
         }
         getFactoryWithLogPolicy(defaultRequestPolicyFactories) {
             defaultRequestPolicyFactories.push(msRest.logPolicy());
-        }
-        parseConnectionString(conn) {
-            const em = /Endpoint=(.*?)(;|$)/g.exec(conn);
-            if (!em)
-                return null;
-            const endpoint = em[1];
-            const km = /AccessKey=(.*?)(;|$)/g.exec(conn);
-            if (!km)
-                return null;
-            const key = km[1];
-            if (!endpoint || !key)
-                return null;
-            const pm = /Port=(.*?)(;|$)/g.exec(conn);
-            const port = pm == null ? '' : pm[1];
-            var url$1 = new url.URL(endpoint);
-            url$1.port = port;
-            const host = url$1.toString();
-            url$1.port = '';
-            const audience = url$1.toString();
-            return {
-                host: host,
-                audience: audience,
-                key: key,
-                wshost: host.replace('https://', 'wss://').replace('http://', 'ws://')
-            };
         }
         /**
          * Check if the service is healthy
@@ -1428,6 +1461,7 @@
     }
 
     exports.ConsoleHttpPipelineLogger = ConsoleHttpPipelineLogger;
+    exports.WebPubSubServiceEndpoint = WebPubSubServiceEndpoint;
     exports.WebPubSubServiceRestClient = WebPubSubServiceRestClient;
 
     Object.defineProperty(exports, '__esModule', { value: true });

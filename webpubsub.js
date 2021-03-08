@@ -22,19 +22,28 @@
             this.conn = conn;
             this.endpoint = this.getServiceEndpoint(conn);
         }
-        signClient(hub) {
+        clientNegotiate(hub, options) {
+            var _a;
             var clientUrl = `${this.endpoint.wshost}client/hubs/${hub}`;
             var url$1 = new url.URL(clientUrl);
             url$1.port = '';
             const audience = url$1.toString();
             var key = this.endpoint.key;
+            var payload = (_a = options === null || options === void 0 ? void 0 : options.claims) !== null && _a !== void 0 ? _a : {};
+            if (options === null || options === void 0 ? void 0 : options.roles) {
+                payload.role = options.roles;
+            }
+            var signOptions = {
+                audience: audience,
+                expiresIn: "1h",
+                algorithm: "HS256",
+            };
+            if (options === null || options === void 0 ? void 0 : options.userId) {
+                signOptions.subject = options === null || options === void 0 ? void 0 : options.userId;
+            }
             return {
                 url: clientUrl,
-                token: jwt.sign({}, key, {
-                    audience: audience,
-                    expiresIn: "1h",
-                    algorithm: "HS256"
-                })
+                token: jwt.sign(payload, key, signOptions),
             };
         }
         getServiceEndpoint(conn) {
@@ -1065,7 +1074,6 @@
         serializer: serializer$2
     };
     function fulfillSpec(payloadMessage, baseSepc) {
-        console.log("fulfill");
         if (typeof payloadMessage === "string") {
             return Object.assign(Object.assign({}, baseSepc), { requestBody: {
                     parameterPath: "payloadMessage",

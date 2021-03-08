@@ -2,7 +2,7 @@ const {WebPubSubServiceEndpoint, WebPubSubServiceRestClient} = require('./webpub
 
 async function main() {
     var se = new WebPubSubServiceEndpoint("conn");
-    var clientResponse = se.signClient('hub1');
+    var clientResponse = se.clientNegotiate('hub1');
     console.log(clientResponse);
     var rest = new WebPubSubServiceRestClient("conn", "hub");
     await rest.sendToAll("message");

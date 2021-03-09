@@ -942,12 +942,12 @@
     };
     const sendToUserOperationSpec$1 = {
         httpMethod: "POST",
-        path: "api/users/{id}/:send",
+        path: "api/hubs/{hub}/users/{id}/:send",
         urlParameters: [
+            hub,
             id
         ],
         queryParameters: [
-            hub,
             apiVersion
         ],
         headerParameters: [

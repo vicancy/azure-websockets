@@ -1082,15 +1082,10 @@
         }
         clientNegotiate(hub, options) {
             var _a;
-            var clientUrl = `${this.endpoint.wshost}client/hubs/${hub}`;
-            var url$1 = new url.URL(clientUrl);
-            url$1.port = '';
-            const audience = url$1.toString();
+            var clientUrl = `${this.endpoint.websocketHost}client/hubs/${hub}`;
+            const audience = `${this.endpoint.audience}client/hubs/${hub}`;
             var key = this.endpoint.key;
             var payload = (_a = options === null || options === void 0 ? void 0 : options.claims) !== null && _a !== void 0 ? _a : {};
-            if (options === null || options === void 0 ? void 0 : options.roles) {
-                payload.role = options.roles;
-            }
             var signOptions = {
                 audience: audience,
                 expiresIn: "1h",
@@ -1125,15 +1120,17 @@
             const pm = /Port=(.*?)(;|$)/g.exec(conn);
             const port = pm == null ? '' : pm[1];
             var url$1 = new url.URL(endpoint);
-            url$1.port = port;
-            const host = url$1.toString();
-            url$1.port = '';
+            var originalProtocol = url$1.protocol;
+            url$1.protocol = originalProtocol === 'http:' ? 'ws:' : 'wss:';
             const audience = url$1.toString();
+            url$1.port = port;
+            var websocketHost = url$1.toString();
+            url$1.protocol = originalProtocol;
             return {
-                host: host,
+                websocketHost: websocketHost,
+                serviceUrl: url$1,
                 audience: audience,
                 key: key,
-                wshost: host.replace('https://', 'wss://').replace('http://', 'ws://')
             };
         }
     }
@@ -1178,10 +1175,11 @@
             this.apiVersion = "2020-10-01";
             this.hub = hub;
             var endpoint = new WebPubSubServiceEndpoint(connectionString);
+            this.serviceUrl = endpoint.endpoint.serviceUrl;
             this.credential = new WebPubSubKeyCredentials(endpoint.endpoint.key);
             this.client = new WebPubSubServiceClient(this.credential, {
                 //httpPipelineLogger: options?.dumpRequest ? new ConsoleHttpPipelineLogger(HttpPipelineLogLevel.INFO) : undefined,
-                baseUri: endpoint.endpoint.host,
+                baseUri: endpoint.endpoint.serviceUrl.href,
                 requestPolicyFactories: (options === null || options === void 0 ? void 0 : options.dumpRequest) ? this.getFactoryWithLogPolicy : undefined,
             });
             this.sender = new WebPubSubSendApi(this.client);
@@ -1561,6 +1559,12 @@
         ErrorCode[ErrorCode["userError"] = 1] = "userError";
         ErrorCode[ErrorCode["unauthorized"] = 2] = "unauthorized";
     })(ErrorCode || (ErrorCode = {}));
+    var PayloadDataType;
+    (function (PayloadDataType) {
+        PayloadDataType[PayloadDataType["binary"] = 0] = "binary";
+        PayloadDataType[PayloadDataType["text"] = 1] = "text";
+        PayloadDataType[PayloadDataType["json"] = 2] = "json";
+    })(PayloadDataType || (PayloadDataType = {}));
     class DefaultEventHandler {
         constructor(options) {
             this.options = options;
@@ -1642,7 +1646,10 @@
                     var connectResponse = yield this.eventHandler.onConnect(connectRequest);
                     if (connectRequest) {
                         return {
-                            body: JSON.stringify(connectResponse)
+                            payload: {
+                                data: JSON.stringify(connectResponse),
+                                dataType: PayloadDataType.json
+                            }
                         };
                     }
                     else {
@@ -1666,10 +1673,11 @@
                     this.eventHandler.onDisconnected(disconnectedRequest);
                 }
                 else if (type.startsWith("azure.webpubsub.user")) {
-                    console.log(receivedEvent);
                     var data;
+                    var dataType = PayloadDataType.binary;
                     if (receivedEvent.data) {
                         data = receivedEvent.data;
+                        dataType = receivedEvent.datacontenttype === 'application/json' ? PayloadDataType.json : PayloadDataType.text;
                     }
                     else if (receivedEvent.data_base64) {
                         data = decode(receivedEvent.data_base64);
@@ -1680,7 +1688,10 @@
                     var userRequest = {
                         eventName: context.eventName,
                         context: context,
-                        data: data
+                        payload: {
+                            data: data,
+                            dataType: dataType
+                        }
                     };
                     console.log(userRequest);
                     if (!userRequest) {
@@ -1772,26 +1783,22 @@
         constructor(connectionString, hub, options) {
             var _a;
             super(connectionString, hub, options);
-            /**
-             * The SignalR API version being used by this client
-             */
             this.apiVersion = "2020-10-01";
             this.hub = hub;
+            this._serviceHost = this.serviceUrl.host;
             this._parser = new ProtocolParser(this.hub, new DefaultEventHandler(options), options === null || options === void 0 ? void 0 : options.dumpRequest);
             this.eventHandlerUrl = (_a = options === null || options === void 0 ? void 0 : options.eventHandlerUrl) !== null && _a !== void 0 ? _a : `/api/webpubsub/hubs/${this.hub}`;
         }
-        Process(req) {
-            return __awaiter(this, void 0, void 0, function* () {
-                var result = yield this._parser.getResponse(req);
-                if (result === undefined) {
-                    return { body: undefined };
-                }
-                return result;
-            });
-        }
         handleNodeRequest(request, response) {
-            var _a, _b;
+            var _a, _b, _c;
             return __awaiter(this, void 0, void 0, function* () {
+                // TODO: negotiate middleware
+                var abuseHost = this.tryHandleAbuseProtectionRequest(request);
+                if (abuseHost) {
+                    response.setHeader("WebHook-Allowed-Origin", abuseHost);
+                    response.end();
+                    return true;
+                }
                 if (request.method !== 'POST') {
                     return false;
                 }
@@ -1799,32 +1806,58 @@
                     return false;
                 }
                 var result = yield this._parser.processNodeHttpRequest(request);
-                if (result === null || result === void 0 ? void 0 : result.body) {
-                    if (typeof (result.body) === 'string') {
-                        response.setHeader("Content-Type", "text/plain");
+                if (result === null || result === void 0 ? void 0 : result.payload) {
+                    if (result.payload.dataType === PayloadDataType.binary) {
+                        response.setHeader("Content-Type", "application/octet-stream");
+                    }
+                    else if (result.payload.dataType === PayloadDataType.json) {
+                        response.setHeader("Content-Type", "application/json");
+                    }
+                    else {
+                        response.setHeader("Content-Type", "text/plain; charset=utf-8");
                     }
                 }
-                response.end((_b = result === null || result === void 0 ? void 0 : result.body) !== null && _b !== void 0 ? _b : '');
+                response.end((_c = (_b = result === null || result === void 0 ? void 0 : result.payload) === null || _b === void 0 ? void 0 : _b.data) !== null && _c !== void 0 ? _c : '');
                 return true;
             });
         }
         getMiddleware() {
             const router = express.Router();
             router.use(this.eventHandlerUrl, (req, res) => __awaiter(this, void 0, void 0, function* () {
-                var _a;
+                var _a, _b;
+                var abuseHost = this.tryHandleAbuseProtectionRequest(req);
+                if (abuseHost) {
+                    res.setHeader("WebHook-Allowed-Origin", abuseHost);
+                    res.end();
+                    return;
+                }
                 if (req.method !== 'POST') {
                     res.status(400).send('Invalid method ' + req.method);
                     return;
                 }
                 var result = yield this._parser.processNodeHttpRequest(req);
-                if (result === null || result === void 0 ? void 0 : result.body) {
-                    if (typeof (result.body) === 'string') {
+                if (result === null || result === void 0 ? void 0 : result.payload) {
+                    if (result.payload.dataType === PayloadDataType.binary) {
+                        res.type('binary');
+                    }
+                    else if (result.payload.dataType === PayloadDataType.json) {
+                        res.type('json');
+                    }
+                    else {
                         res.type('text');
                     }
                 }
-                res.end((_a = result === null || result === void 0 ? void 0 : result.body) !== null && _a !== void 0 ? _a : '');
+                res.end((_b = (_a = result === null || result === void 0 ? void 0 : result.payload) === null || _a === void 0 ? void 0 : _a.data) !== null && _b !== void 0 ? _b : '');
             }));
             return router;
+        }
+        tryHandleAbuseProtectionRequest(req) {
+            if (req.method === 'OPTIONS') {
+                if (req.headers['WebHook-Request-Origin'] === this._serviceHost) {
+                    return this._serviceHost;
+                }
+            }
+            return undefined;
         }
     }
 

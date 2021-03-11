@@ -2,7 +2,7 @@
   "name": "azure-websockets",
   "author": "Microsoft Corporation",
   "description": "WebPubSubServiceRestClient Library with typescript type definitions for node.js and browser.",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "dependencies": {
     "@azure/core-http": "^1.2.2",
     "@azure/ms-rest-azure-js": "^2.0.1",
@@ -23,5 +23,8 @@
     "isomorphic"
   ],
   "license": "MIT",
-  "main": "webpubsub.js"
+  "main": "webpubsub.js",
+  "devDependencies": {
+    "dotenv": "^8.2.0"
+  }
 }

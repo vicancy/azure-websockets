@@ -1846,10 +1846,6 @@
         }
         tryHandleCloudEvents(request, response, url) {
             return __awaiter(this, void 0, void 0, function* () {
-                if (url !== this.path) {
-                    console.warn(`Url ${url} does not match ${this.path}`);
-                    return false;
-                }
                 if (request.method !== 'POST') {
                     response.statusCode = 400;
                     response.end();

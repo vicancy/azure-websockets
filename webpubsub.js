@@ -1831,7 +1831,7 @@
             return router;
         }
         tryHandleAbuseProtectionRequests(request, response, url) {
-            if (url !== this.path || request.method !== 'OPTIONS') {
+            if (request.method !== 'OPTIONS') {
                 return false;
             }
             if (request.headers['webhook-request-origin'] === this._serviceHost) {

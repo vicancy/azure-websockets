@@ -1,0 +1,20 @@
+import { OperationURLParameter, OperationQueryParameter, OperationParameter } from "@azure/core-http";
+export declare const $host: OperationURLParameter;
+export declare const apiVersion: OperationQueryParameter;
+export declare const contentType: OperationParameter;
+export declare const payloadMessage: OperationParameter;
+export declare const contentType1: OperationParameter;
+export declare const payloadMessage1: OperationParameter;
+export declare const contentType2: OperationParameter;
+export declare const payloadMessage2: OperationParameter;
+export declare const hub: OperationURLParameter;
+export declare const excluded: OperationQueryParameter;
+export declare const connectionId: OperationURLParameter;
+export declare const reason: OperationQueryParameter;
+export declare const group: OperationURLParameter;
+export declare const userId: OperationURLParameter;
+export declare const permission: OperationURLParameter;
+export declare const targetName: OperationQueryParameter;
+export declare const permission1: OperationURLParameter;
+export declare const permission2: OperationURLParameter;
+//# sourceMappingURL=parameters.d.ts.map

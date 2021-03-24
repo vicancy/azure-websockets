@@ -2,7 +2,7 @@
   "name": "@azure/webpubsub",
   "author": "Microsoft Corporation",
   "description": "WebPubSubServiceClient and event handler library preview.",
-  "version": "1.3.1",
+  "version": "0.0.1",
   "dependencies": {
     "@azure/core-http": "^1.2.2",
     "@azure/ms-rest-azure-js": "^2.0.1",

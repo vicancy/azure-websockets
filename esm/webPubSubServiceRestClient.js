@@ -3,6 +3,7 @@
 import { __awaiter } from "tslib";
 import { WebPubSub, WebPubSubServiceClient as GeneratedClient } from "./generated/webPubSubServiceClient";
 import { WebPubSubKeyCredentials } from "./webPubSubKeyCredentials";
+import { WebPubSubServiceEndpoint } from "./webPubSubServiceEndpoint";
 import jwt from "jsonwebtoken";
 import { RestError, HttpPipelineLogLevel, logPolicy } from "@azure/core-http";
 export class ConsoleHttpPipelineLogger {
@@ -36,21 +37,27 @@ export class ConsoleHttpPipelineLogger {
 /**
  * Client for connecting to a SignalR hub
  */
-export class WebPubSubServiceClient {
-    constructor(conn, hub, options) {
+export class WebPubSubServiceRestClient {
+    constructor(connectionStringOrEndpoint, hub, options) {
         /**
          * The SignalR API version being used by this client
          */
         this.apiVersion = "2020-10-01";
-        const parsedCs = parseConnectionString(conn);
-        this._endpoint = parsedCs.endpoint;
-        this.credential = parsedCs.credential;
+        if (typeof connectionStringOrEndpoint === 'string') {
+            this._endpoint = new WebPubSubServiceEndpoint(connectionStringOrEndpoint);
+        }
+        else {
+            this._endpoint = connectionStringOrEndpoint;
+        }
         this.hub = hub;
-        this.client = new GeneratedClient(this.credential, this._endpoint, {
+        this.serviceUrl = this._endpoint.endpoint.serviceUrl;
+        this.credential = new WebPubSubKeyCredentials(this._endpoint.endpoint.key);
+        this.client = new GeneratedClient(this.credential, this._endpoint.endpoint.serviceUrl.href, {
             //httpPipelineLogger: options?.dumpRequest ? new ConsoleHttpPipelineLogger(HttpPipelineLogLevel.INFO) : undefined,
             requestPolicyFactories: (options === null || options === void 0 ? void 0 : options.dumpRequest) ? this.getFactoryWithLogPolicy : undefined,
         });
         this.sender = new WebPubSub(this.client);
+        this._servicePath = this.serviceUrl.toString();
     }
     /**
      * Auth the client connection with userId and custom claims if any
@@ -59,7 +66,7 @@ export class WebPubSubServiceClient {
     getAuthenticationToken(options) {
         var _a;
         return __awaiter(this, void 0, void 0, function* () {
-            const endpoint = this._endpoint.endsWith("/") ? this._endpoint : this._endpoint + "/";
+            const endpoint = this._servicePath.endsWith("/") ? this._servicePath : this._servicePath + "/";
             const key = this.credential.key;
             const hub = this.hub;
             var clientEndpoint = endpoint.replace(/(http)(s?:\/\/)/gi, "ws$2");
@@ -105,56 +112,12 @@ export class WebPubSubServiceClient {
             }
         });
     }
-    hasPermission(connectionId, permission, group, options = {}) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const res = yield this.client.webPubSubApi.checkPermission(this.hub, permission, connectionId, {
-                    targetName: group
-                });
-                return this.verifyResponse(res, 200, 404);
-            }
-            finally {
-            }
-        });
-    }
-    grantPermission(connectionId, permission, group, options = {}) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const res = yield this.client.webPubSubApi.grantPermission(this.hub, permission, connectionId, {
-                    targetName: group
-                });
-                return this.verifyResponse(res, 200);
-            }
-            finally {
-            }
-        });
-    }
-    revokePermission(connectionId, permission, group, options = {}) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const res = yield this.client.webPubSubApi.revokePermission(this.hub, permission, connectionId, {
-                    targetName: group
-                });
-                return this.verifyResponse(res, 200);
-            }
-            finally {
-            }
-        });
-    }
     sendToAll(message, options = {}) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                var res = typeof message === "string" ?
-                    (options.dataType === 'text' ?
-                        yield this.sender.sendToAll(this.hub, "text/plain", message, {
-                            excluded: options.excludedConnections
-                        }) :
-                        yield this.sender.sendToAll(this.hub, "application/json", message, {
-                            excluded: options.excludedConnections
-                        })) :
-                    yield this.sender.sendToAll(this.hub, "application/octet-stream", message, {
-                        excluded: options.excludedConnections
-                    });
+                var res = yield this.sender.sendToAll(this.hub, "application/octet-stream", message, {
+                    excluded: options.excludedConnections
+                });
                 return this.verifyResponse(res, 202);
             }
             finally {
@@ -164,11 +127,7 @@ export class WebPubSubServiceClient {
     sendToUser(username, message, options = {}) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                var res = typeof message === "string" ?
-                    (options.dataType === 'text' ?
-                        yield this.sender.sendToUser(this.hub, username, "text/plain", message, {}) : yield this.sender.sendToUser(this.hub, username, "application/json", message, {}))
-                    :
-                        yield this.sender.sendToUser(this.hub, username, "application/octet-stream", message, {});
+                var res = yield this.sender.sendToUser(this.hub, username, "application/octet-stream", message, {});
                 return this.verifyResponse(res, 202);
             }
             finally {
@@ -179,10 +138,7 @@ export class WebPubSubServiceClient {
     sendToConnection(connectionId, message, options = {}) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                var res = typeof message === "string" ?
-                    (options.dataType === 'text' ?
-                        yield this.sender.sendToConnection(this.hub, connectionId, "text/plain", message, {}) : yield this.sender.sendToConnection(this.hub, connectionId, "application/json", message, {})) :
-                    yield this.sender.sendToConnection(this.hub, connectionId, "application/octet-stream", message, {});
+                var res = yield this.sender.sendToConnection(this.hub, connectionId, "application/octet-stream", message, {});
                 return this.verifyResponse(res, 202);
             }
             finally {
@@ -378,24 +334,4 @@ export class WebPubSubServiceClient {
         }
     }
 }
-function parseConnectionString(conn) {
-    const em = /Endpoint=(.*?)(;|$)/g.exec(conn);
-    if (!em)
-        throw new TypeError("connection string missing endpoint");
-    const endpointPart = em[1];
-    const km = /AccessKey=(.*?)(;|$)/g.exec(conn);
-    if (!km)
-        throw new Error("connection string missing access key");
-    const key = km[1];
-    const credential = new WebPubSubKeyCredentials(key);
-    const pm = /Port=(.*?)(;|$)/g.exec(conn);
-    const port = pm == null ? "" : pm[1];
-    const url = new URL(endpointPart);
-    url.port = port;
-    const endpoint = url.toString();
-    url.port = "";
-    // todo: Support PORT with audience n stuff.
-    // this.audience = url.toString();
-    return { credential, endpoint: (endpoint.endsWith("/") ? endpoint : endpoint + "/") };
-}
-//# sourceMappingURL=webPubSubServiceClient.js.map
+//# sourceMappingURL=webPubSubServiceRestClient.js.map

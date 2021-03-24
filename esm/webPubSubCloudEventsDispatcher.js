@@ -3,7 +3,44 @@
 import { __awaiter } from "tslib";
 import { HTTP } from "cloudevents";
 import { decode } from "typescript-base64-arraybuffer";
-import { ErrorCode, PayloadDataType } from "./webPubSubCloudEventsProtocols";
+class ConnectResponseHandler {
+    constructor(response) {
+        this.response = response;
+    }
+    success(response) {
+        this.response.statusCode = 200;
+        this.response.setHeader("Content-Type", "application/json");
+        this.response.end(JSON.stringify(response));
+    }
+    fail(code, detail) {
+        this.response.statusCode = code;
+        this.response.end(detail !== null && detail !== void 0 ? detail : "");
+    }
+}
+class UserEventResponseHandler {
+    constructor(response) {
+        this.response = response;
+    }
+    success(data, dataType) {
+        this.response.statusCode = 200;
+        switch (dataType) {
+            case 'json':
+                this.response.setHeader("Content-Type", "application/json;charset=utf-8");
+                break;
+            case 'text':
+                this.response.setHeader("Content-Type", "text/plain; charset=utf-8");
+                break;
+            default:
+                this.response.setHeader("Content-Type", "application/octet-stream");
+                break;
+        }
+        this.response.end(data !== null && data !== void 0 ? data : "");
+    }
+    fail(code, detail) {
+        this.response.statusCode = code;
+        this.response.end(detail !== null && detail !== void 0 ? detail : "");
+    }
+}
 export class CloudEventsDispatcher {
     constructor(hub, eventHandler, dumpRequest) {
         this.hub = hub;
@@ -11,161 +48,81 @@ export class CloudEventsDispatcher {
         this.dumpRequest = dumpRequest;
     }
     processRequest(request, response) {
-        var _a, _b, _c;
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!this.eventHandler) {
-                response.end();
-                return;
-            }
-            try {
-                var eventRequest = yield this.convertHttpToEvent(request);
-                var eventResponse = yield this.getResponse(eventRequest);
-                if (!eventResponse) {
-                    // we consider no response as 200 valid response
-                    response.end();
-                    return;
-                }
-                if (eventResponse.error) {
-                    switch (eventResponse.error.code) {
-                        case ErrorCode.userError:
-                            response.statusCode = 400;
-                            break;
-                        case ErrorCode.unauthorized:
-                            response.statusCode = 401;
-                            break;
-                        default:
-                            response.statusCode = 500;
-                            break;
-                    }
-                    response.end((_a = eventResponse.error.detail) !== null && _a !== void 0 ? _a : "");
-                    return;
-                }
-                if (eventResponse === null || eventResponse === void 0 ? void 0 : eventResponse.payload) {
-                    if (eventResponse.payload.dataType === PayloadDataType.binary) {
-                        response.setHeader("Content-Type", "application/octet-stream");
-                    }
-                    else if (eventResponse.payload.dataType === PayloadDataType.json) {
-                        response.setHeader("Content-Type", "application/json");
-                    }
-                    else {
-                        response.setHeader("Content-Type", "text/plain; charset=utf-8");
-                    }
-                    response.end((_c = (_b = eventResponse.payload) === null || _b === void 0 ? void 0 : _b.data) !== null && _c !== void 0 ? _c : "");
-                }
-            }
-            catch (err) {
-                console.error(`Error processing request ${request}: ${err}`);
-                response.statusCode = 500;
-                response.end(err.message);
-            }
-        });
-    }
-    getResponse(request) {
         var _a, _b, _c, _d;
         return __awaiter(this, void 0, void 0, function* () {
-            const receivedEvent = HTTP.toEvent(request);
+            // check if hub matches
+            if (!this.eventHandler || request.headers["ce-hub"] !== this.hub) {
+                return false;
+            }
+            var eventRequest = yield this.convertHttpToEvent(request);
+            const receivedEvent = HTTP.toEvent(eventRequest);
             if (this.dumpRequest === true) {
                 console.log(receivedEvent);
             }
             var type = receivedEvent.type.toLowerCase();
-            var context = this.GetContext(receivedEvent, request.headers.host);
-            if (context.hub !== this.hub) {
-                // it is possible when multiple hubs share the same handler
-                console.info(`Incoming request is for hub '${this.hub}' while the incoming request is for hub '${context.hub}'`);
-                return;
-            }
-            // TODO: valid request is a valid cloud event with WebPubSub extension
-            if (type === "azure.webpubsub.sys.connect") {
-                if (!((_a = this.eventHandler) === null || _a === void 0 ? void 0 : _a.onConnect)) {
-                    // 401 if onConnect is not configured
-                    return {
-                        error: {
-                            code: ErrorCode.unauthorized
-                        }
-                    };
-                }
-                var connectRequest = receivedEvent.data;
-                if (!connectRequest) {
-                    throw new Error("Data is expected");
-                }
-                connectRequest.context = context;
-                var connectResponse = yield this.eventHandler.onConnect(connectRequest);
-                if (connectRequest) {
-                    return {
-                        payload: {
-                            data: JSON.stringify(connectResponse),
-                            dataType: PayloadDataType.json
-                        }
-                    };
-                }
-                else {
-                    // what is the differnce between not configure and not return? there is no such definition in C#..
-                    // 401 if onConnect is not configured
-                    return {
-                        error: {
-                            code: ErrorCode.unauthorized
-                        }
-                    };
-                }
-            }
-            else if (type === "azure.webpubsub.sys.connected") {
-                if (!((_b = this.eventHandler) === null || _b === void 0 ? void 0 : _b.onConnected)) {
-                    return;
-                }
-                var connectedRequest = receivedEvent.data;
-                if (!connectedRequest) {
-                    throw new Error("Data is expected");
-                }
-                connectedRequest.context = context;
-                this.eventHandler.onConnected(connectedRequest);
-            }
-            else if (type === "azure.webpubsub.sys.disconnected") {
-                if (!((_c = this.eventHandler) === null || _c === void 0 ? void 0 : _c.onDisconnected)) {
-                    return;
-                }
-                var disconnectedRequest = receivedEvent.data;
-                if (!disconnectedRequest) {
-                    throw new Error("Data is expected");
-                }
-                disconnectedRequest.context = context;
-                this.eventHandler.onDisconnected(disconnectedRequest);
-            }
-            else if (type.startsWith("azure.webpubsub.user")) {
-                if (!((_d = this.eventHandler) === null || _d === void 0 ? void 0 : _d.onUserEvent)) {
-                    return;
-                }
-                var data;
-                var dataType = PayloadDataType.binary;
-                if (receivedEvent.data) {
-                    data = receivedEvent.data;
-                    dataType =
-                        receivedEvent.datacontenttype === "application/json"
-                            ? PayloadDataType.json
-                            : PayloadDataType.text;
-                }
-                else if (receivedEvent.data_base64) {
-                    data = decode(receivedEvent.data_base64);
-                }
-                else {
-                    throw new Error("empty data payload");
-                }
-                var userRequest = {
-                    context: context,
-                    payload: {
-                        data: data,
-                        dataType: dataType
+            switch (type) {
+                case "azure.webpubsub.sys.connect": {
+                    var handler = new ConnectResponseHandler(response);
+                    if (!((_a = this.eventHandler) === null || _a === void 0 ? void 0 : _a.handleConnect)) {
+                        handler.fail(401);
+                        return true;
                     }
-                };
-                if (!userRequest) {
-                    throw new Error("Data is expected");
+                    var connectRequest = receivedEvent.data;
+                    connectRequest.context = this.GetContext(receivedEvent, request.headers.host);
+                    this.eventHandler.handleConnect(connectRequest, handler);
+                    return true;
                 }
-                userRequest.context = context;
-                return yield this.eventHandler.onUserEvent(userRequest);
+                case "azure.webpubsub.sys.connected": {
+                    if ((_b = this.eventHandler) === null || _b === void 0 ? void 0 : _b.onConnected) {
+                        var connectedRequest = receivedEvent.data;
+                        connectedRequest.context = this.GetContext(receivedEvent, request.headers.host);
+                        this.eventHandler.onConnected(connectedRequest);
+                    }
+                    return true;
+                }
+                case "azure.webpubsub.sys.disconnected": {
+                    if ((_c = this.eventHandler) === null || _c === void 0 ? void 0 : _c.onDisconnected) {
+                        var disconnectedRequest = receivedEvent.data;
+                        disconnectedRequest.context = this.GetContext(receivedEvent, request.headers.host);
+                        this.eventHandler.onDisconnected(disconnectedRequest);
+                    }
+                    return true;
+                }
+                default:
+                    if (type.startsWith("azure.webpubsub.user")) {
+                        var eventHandler = new UserEventResponseHandler(response);
+                        if (!((_d = this.eventHandler) === null || _d === void 0 ? void 0 : _d.handleUserEvent)) {
+                            eventHandler.success();
+                            return true;
+                        }
+                        var data;
+                        var dataType = 'binary';
+                        if (receivedEvent.data) {
+                            data = receivedEvent.data;
+                            dataType =
+                                receivedEvent.datacontenttype === "application/json"
+                                    ? 'json'
+                                    : 'text';
+                        }
+                        else if (receivedEvent.data_base64) {
+                            data = decode(receivedEvent.data_base64);
+                        }
+                        else {
+                            throw new Error("empty data payload");
+                        }
+                        var userRequest = {
+                            context: this.GetContext(receivedEvent, request.headers.host),
+                            data: data,
+                            dataType: dataType
+                        };
+                        this.eventHandler.handleUserEvent(userRequest, eventHandler);
+                        return true;
+                    }
+                    else {
+                        // unknown cloud events
+                        return false;
+                    }
             }
-            else {
-                throw new Error("Not supported event: " + type);
-            }
-            return;
         });
     }
     GetContext(ce, host) {

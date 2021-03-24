@@ -1,4 +1,4 @@
-import { Enum0 as Permission } from "./generated/index";
+import { WebPubSubServiceEndpoint } from "./webPubSubServiceEndpoint";
 import { HttpRequestBody, HttpPipelineLogLevel, HttpPipelineLogger } from "@azure/core-http";
 /**
  * Options for auth a client
@@ -34,7 +34,6 @@ export interface GetAuthenticationTokenResponse {
 }
 export interface OperationOptions {
     apiVersion?: string;
-    dataType?: 'binary' | 'text' | 'json';
 }
 /**
  * Options for closing a connection to a hub.
@@ -64,7 +63,7 @@ export interface HubBroadcastOptions extends OperationOptions {
      */
     excludedConnections?: string[];
 }
-export interface WebPubSubServiceClientOptions {
+export interface WebPubSubServiceRestClientOptions {
     dumpRequest?: boolean;
 }
 export declare class ConsoleHttpPipelineLogger implements HttpPipelineLogger {
@@ -84,7 +83,7 @@ export declare class ConsoleHttpPipelineLogger implements HttpPipelineLogger {
 /**
  * Client for connecting to a SignalR hub
  */
-export declare class WebPubSubServiceClient {
+export declare class WebPubSubServiceRestClient {
     private readonly client;
     private readonly sender;
     private credential;
@@ -101,7 +100,8 @@ export declare class WebPubSubServiceClient {
      */
     serviceUrl: URL;
     private _endpoint;
-    constructor(conn: string, hub: string, options?: WebPubSubServiceClientOptions);
+    private _servicePath;
+    constructor(connectionStringOrEndpoint: string | WebPubSubServiceEndpoint, hub: string, options?: WebPubSubServiceRestClientOptions);
     /**
      * Auth the client connection with userId and custom claims if any
      * @param options The options that the client has
@@ -114,9 +114,6 @@ export declare class WebPubSubServiceClient {
      * @param options Additional options
      */
     serviceIsHealthy(options?: OperationOptions): Promise<boolean>;
-    hasPermission(connectionId: string, permission: Permission, group?: string, options?: OperationOptions): Promise<boolean>;
-    grantPermission(connectionId: string, permission: Permission, group?: string, options?: OperationOptions): Promise<boolean>;
-    revokePermission(connectionId: string, permission: Permission, group?: string, options?: OperationOptions): Promise<boolean>;
     /**
      * Broadcast a text message to all connections on this hub.
      *
@@ -252,4 +249,4 @@ export declare class WebPubSubServiceClient {
     publish(groupName: string, message: HttpRequestBody, options?: HubBroadcastOptions): Promise<boolean>;
     private verifyResponse;
 }
-//# sourceMappingURL=webPubSubServiceClient.d.ts.map
+//# sourceMappingURL=webPubSubServiceRestClient.d.ts.map

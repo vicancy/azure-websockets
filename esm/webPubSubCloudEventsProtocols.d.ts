@@ -1,44 +1,7 @@
 /**
- * Error response.
- */
-export interface ErrorResponse {
-    /**
-     * Error code.
-     */
-    code: ErrorCode;
-    /**
-     * Error detail.
-     */
-    detail?: string;
-}
-/**
- * Error code for the response
- */
-export declare enum ErrorCode {
-    /**
-     * Unauthorized response to service using 401.
-     */
-    unauthorized = 401,
-    /**
-     * Server error response to service using 500.
-     */
-    serverError = 500,
-    /**
-     * User error response to service using 400.
-     */
-    userError = 400
-}
-/**
  * Response of the connect event.
  */
 export interface ConnectResponse {
-    /**
-     * If error is set, we consider this as a failed response.
-     */
-    error?: ErrorResponse;
-    /**
-     * Set the groups the connection would like to join.
-     */
     groups?: string[];
     /**
      * Set the roles the connection belongs to.
@@ -52,19 +15,6 @@ export interface ConnectResponse {
      * Set the subprotocol for the connection to complete WebSocket handshake.
      */
     subprotocol?: string;
-}
-/**
- * Response of the user event.
- */
-export interface UserEventResponse {
-    /**
-     * Error response. If error is set, we consider this as a failed response.
-     */
-    error?: ErrorResponse;
-    /**
-     * Payload data to send back to the client.
-     */
-    payload?: PayloadData;
 }
 /**
  * The connection context representing the client WebSocket connection.
@@ -145,15 +95,11 @@ export interface ConnectedRequest {
 /**
  * Request for the user event.
  */
-export interface UserEventRequest {
+export interface UserEventRequest extends PayloadData {
     /**
      * The context of current CloudEvents request.
      */
     context: ConnectionContext;
-    /**
-     * The payload body of the user event request.
-     */
-    payload: PayloadData;
 }
 /**
  * The payload data.
@@ -166,24 +112,7 @@ export interface PayloadData {
     /**
      * The type of the data.
      */
-    dataType: PayloadDataType;
-}
-/**
- * The data type of the payload data.
- */
-export declare enum PayloadDataType {
-    /**
-     * The binary format.
-     */
-    binary = 0,
-    /**
-     * The plain text format.
-     */
-    text = 1,
-    /**
-     * The JSON format.
-     */
-    json = 2
+    dataType: 'binary' | 'text' | 'json';
 }
 /**
  * Request for the disconnected event.

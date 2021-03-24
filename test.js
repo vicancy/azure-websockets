@@ -1,50 +1,39 @@
-const { WebPubSubServer } = require('./webpubsub')
+const { WebPubSubServiceClient, WebPubSubCloudEventsHandler } = require('./dist/webpubsub')
 const dotenv = require('dotenv');
-const http = require('http');
-
+const express = require("express");
 dotenv.config();
 
-const wpsserver = new WebPubSubServer(process.env.WPS_CONNECTION_STRING, 'chat');
+const serviceClient = new WebPubSubServiceClient(process.env.WPS_CONNECTION_STRING, 'chat');
 
-// sample of client negotiate
-console.log(wpsserver.endpoint.clientNegotiate('chat', {
-    userId: "vicancy",
-    claims: {
-      hey: ["w"],
-      role: ["webpubsub.group.join"],
-   }
-  }));
-  
-const serviceClient = wpsserver.createServiceClient();
-const handler = wpsserver.createCloudEventsHandler(
+// sample of generating client token
+console.log(serviceClient.getAuthenticationToken({
+  userId: "vicancy",
+  claims: {
+    hey: ["w"],
+    role: ["webpubsub.group.join"],
+  }
+}));
+
+const handler = new WebPubSubCloudEventsHandler('chat', ['*'],
   {
     //path: "/customUrl", // optional
-    onConnect: async connectRequest => {
-      return {
+    handleConnect: async (req, res) => {
+      res.success({
         userId: "vicancy"
-      };
+      });
     },
     onConnected: async connectedRequest => {
-      await serviceClient.sendToAll(connectedRequest.context.connectionId + " connected");
+      await serviceClient.sendToAll(connectedRequest.context.connectionId + " connected", { dataType: "text" });
     },
-    onUserEvent: async userRequest => {
-      console.log(`Received user request data: ${userRequest.payload.data}`);
-      if (userRequest.payload.data === 'abort') {
-        return {
-          error: {
-            detail: "aborted"
-          }
-        };
+    handleUserEvent: async (userRequest, res) => {
+      console.log(`Received user request data: ${userRequest.data}`);
+      if (userRequest.data === 'abort') {
+        res.fail(400, "abort");
+      } else if (userRequest.data === 'error') {
+        res.fail(500, "error");
+      } else {
+        res.success("Hey " + userRequest.data, userRequest.dataType);
       }
-      if (userRequest.payload.data === 'error') {
-        throw new Error("error from inside the event");
-      }
-      return {
-        payload: {
-          data: "Hey " + userRequest.payload.data,
-          dataType: userRequest.payload.dataType
-        }
-      };
     },
     onDisconnected: async disconnectRequest => {
       console.log(disconnectRequest.context.userId + " disconnected");
@@ -52,14 +41,8 @@ const handler = wpsserver.createCloudEventsHandler(
   }
 );
 
-const port = 3000;
+const app = express();
 
-const server = http.createServer(async (request, response) => {
-  if (!await handler.handleRequest(request, response)) {
-    console.log(`${request.url} for others to process`);
-    response.statusCode = 404;
-    response.end();
-  }
-});
+app.use(handler.getMiddleware())
 
-server.listen(port, () => console.log(`Azure WebPubSub Upstream ready at http://localhost:${port}${handler.path}`));
+app.listen(3000, () => console.log(`Azure WebPubSub Upstream ready at http://localhost:3000${handler.path}`));

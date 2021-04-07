@@ -1638,10 +1638,13 @@
         }
         publish(groupName, message, options = {}) {
             return __awaiter(this, void 0, void 0, function* () {
+                
                 try {
-                    var res = yield this.sender.sendToGroup(this.hub, groupName, "application/octet-stream", message, {
-                        excluded: options.excludedConnections
-                    });
+                    var res = typeof message === "string" ?
+                        (options.dataType === 'text' ?
+                            yield this.sender.sendToGroup(this.hub, groupName, "text/plain", message, {excluded: options.excludedConnections}) :
+                         yield this.sender.sendToConnection(this.hub, groupName, "application/json", message, {excluded: options.excludedConnections})) :
+                        yield this.sender.sendToConnection(this.hub, groupName, "application/octet-stream", message, {excluded: options.excludedConnections});
                     return this.verifyResponse(res, 200);
                 }
                 finally {
